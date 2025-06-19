@@ -11,9 +11,6 @@ from dotenv import load_dotenv
 import traceback
 import subprocess
 from pydantic import BaseModel,Field
-class Summary(BaseModel):
-    summary: str = Field(description="A detailed summary of the research findings")
-    image_path: str = Field(description="The path to the image file created by the agent")
 
 # Load environment variables
 load_dotenv()
@@ -22,28 +19,12 @@ def get_available_llm():
     """Get the first available LLM from environment variables"""
     llm_configs = [
         {
-            "name": "Groq Llama",
-            "model": "groq/llama-3.3-70b-versatile",
-            "api_key_env": "GROQ_API_KEY",
-            "temperature": 0.7
-        },
-        {
-            "name": "OpenAI GPT-4",
-            "model": "gpt-4o-mini",
-            "api_key_env": "OPENAI_API_KEY", 
-            "temperature": 0.7
-        },
-        {
-            "name": "Anthropic Claude",
-            "model": "claude-3-haiku-20240307",
-            "api_key_env": "ANTHROPIC_API_KEY",
-            "temperature": 0.7
-        },
-        {
             "name": "Ollama Local",
-            "model": "ollama/llama3.2",
+            "model": "ollama/qwen3:1.7b",
             "api_key_env": None,  # No API key needed for local
-            "temperature": 0.7
+            "temperature": 0.7, 
+            "kw":{"base_url":"http://localhost:11434"}
+            
         }
     ]
     
@@ -58,6 +39,8 @@ def get_available_llm():
                     model=config["model"],
                     temperature=config["temperature"],
                     max_tokens=1000,
+                    **config.get('kw', {}),
+                    stream=True  
                 )
                 print(f"✅ Using {config['name']}: {config['model']}")
                 return llm
@@ -99,33 +82,6 @@ print(f"Python executable: {sys.executable}")
 print(f"Current directory: {os.getcwd()}")
 print(f"Base directory: {base_dir}")
 
-# Determine correct npx command for Windows
-npx_cmd = "npx.cmd" if platform.system() == "Windows" else "npx"
-
-def check_npx_availability():
-    """Check if npx is available and working"""
-    try:
-        result = subprocess.run([npx_cmd, "--version"], 
-                              capture_output=True, text=True, timeout=10)
-        if result.returncode == 0:
-            print(f"✓ NPX is available: {result.stdout.strip()}")
-            return True
-        else:
-            print(f"✗ NPX check failed: {result.stderr}")
-            return False
-    except Exception as e:
-        print(f"✗ NPX not available: {e}")
-        return False
-
-def check_python_server():
-    """Check if the Python image server exists"""
-    server_path = base_dir / "servers" / "image_server.py"
-    if server_path.exists():
-        print(f"✓ Python image server found: {server_path}")
-        return True
-    else:
-        print(f"✗ Python image server not found: {server_path}")
-        return False
 
 def check_search_server():
     """Check if the Python search server exists"""
@@ -137,6 +93,7 @@ def check_search_server():
         print(f"✗ Python search server not found: {server_path}")
         return False
 
+
 def get_working_servers():
     """Get list of working server configurations"""
     working_servers = []
@@ -145,21 +102,6 @@ def get_working_servers():
     print("DIAGNOSING MCP SERVERS")
     print("="*50)
     
-    # Check Python image server first (most likely to work)
-    python_server_available = check_python_server()
-    if python_server_available:
-        image_server_params = StdioServerParameters(
-            command="python", 
-            args=[
-                str(base_dir / "servers" / "image_server.py"),
-            ],
-            env={"UV_PYTHON": "3.12", **os.environ},
-        )
-        working_servers.append(("Image Server", image_server_params))
-        print("✓ Image server configured")
-    else:
-        print("✗ Skipping Image server (server file not found)")
-
     # Check Python search server
     search_server_available = check_search_server()
     if search_server_available:
@@ -168,67 +110,22 @@ def get_working_servers():
             args=[
                 str(base_dir / "servers" / "search_server.py"),
             ],
-            env={"UV_PYTHON": "3.12", **os.environ},
+            env={"UV_PYTHON": "3.13", **os.environ},
         )
         working_servers.append(("Python Search Server", search_server_params))
         print("✓ Python search server configured")
     else:
         print("✗ Skipping Python search server (server file not found)")
 
-    # Check NPX availability for filesystem server only
-    npx_available = check_npx_availability()
-    
-    # Only add NPX servers if Node.js version is recent enough
-    if npx_available:
-        node_version_check = check_node_version()
-        if node_version_check:
-            # Filesystem server configuration
-            filesystem_server_params = StdioServerParameters(
-                command=npx_cmd,
-                args=[
-                    "-y",
-                    "@modelcontextprotocol/server-filesystem",
-                    os.path.join(os.path.expanduser("~"), "Downloads")
-                ],
-            )
-            working_servers.append(("Filesystem Server", filesystem_server_params))
-            print("✓ Filesystem server configured")
-        else:
-            print("⚠️  Skipping NPX filesystem server due to Node.js version compatibility issues")
-            print("💡 To enable filesystem server, update Node.js to version 18+ or 20+")
-            print("   Visit: https://nodejs.org/en/download/")
-    else:
-        print("✗ Skipping NPX filesystem server (NPX not available)")
-
     print(f"\nFound {len(working_servers)} server configurations")
     return working_servers
 
-def check_node_version():
-    """Check if Node.js version is compatible"""
-    try:
-        result = subprocess.run(["node", "--version"], 
-                              capture_output=True, text=True, timeout=10)
-        if result.returncode == 0:
-            version = result.stdout.strip()
-            print(f"Node.js version: {version}")
-            # Extract major version number
-            major_version = int(version.lstrip('v').split('.')[0])
-            if major_version >= 18:
-                print("✓ Node.js version is compatible")
-                return True
-            else:
-                print(f"⚠️  Node.js version {version} may be too old (recommend v18+)")
-                return False
-        return False
-    except Exception as e:
-        print(f"✗ Cannot check Node.js version: {e}")
-        return False
 
 class CustomMCPServerAdapter(MCPServerAdapter):
     """Custom MCP Server Adapter with increased timeout"""
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.timeout = 90  # Increase timeout to 90 seconds
+        self.timeout = 1  # Increase timeout to 90 seconds
 
 def test_servers_individually(server_configs):
     """Test each server individually to identify problematic ones"""
@@ -279,17 +176,11 @@ def create_agent_and_tasks(tools=None):
     
     if tools_list:
         research_task = Task(
-            description="Research the topic '{topic}' thoroughly using available MCP tools. If image creation tools are available, create an in-depth diagram showing how the topic works, including key components, processes, and relationships.",
+            description="Research the topic '{topic}' thoroughly using available MCP tools.",
             expected_output="A comprehensive research summary and, if possible, a successfully created diagram/image illustrating the topic.",
             agent=agent,
         )
         
-        summary_task = Task(
-            description="Create a detailed summary of your research findings. If filesystem tools are available, save it as a text file in the Downloads folder. Include key insights, important details, and references to any diagrams created.",
-            expected_output="A detailed summary of research findings, preferably saved as a text file if filesystem access is available.The final response should be in the format of a pydantic model Summary",
-            agent=agent,
-            output_pydantic=Summary
-        )
     else:
         research_task = Task(
             description="Research and analyze the topic '{topic}' thoroughly using your knowledge. Provide detailed insights about how it works, including key components, processes, and relationships.",
@@ -297,16 +188,7 @@ def create_agent_and_tasks(tools=None):
             agent=agent,
         )
         
-        summary_task = Task(
-            description="Create a detailed summary of your analysis, highlighting the most important aspects, key insights, and practical implications of the topic.",
-            expected_output="A well-structured summary with key findings and insights about the topic.The final response should be in the format of a pydantic model Summary",
-            agent=agent,
-            output_pydantic=Summary,
-            markdown=True,  # Enable markdown formatting for the final output
-            output_file="report.md"
-        )
-    
-    return agent, [research_task, summary_task]
+    return agent, [research_task,]
 
 def main():
     """Main function to run the CrewAI application"""
@@ -336,7 +218,7 @@ def main():
             
             # Create agent and tasks with MCP tools
             agent, tasks = create_agent_and_tasks(tools)
-            
+
             # Create crew with error handling
             crew = Crew(
                 agents=[agent],
@@ -352,18 +234,16 @@ def main():
                 print(f"No topic provided, using default: {topic}")
             
             # Execute crew with retry mechanism
-            max_retries = 2
+            max_retries = 0
             for attempt in range(max_retries + 1):
                 try:
                     print(f"\nStarting research on: {topic} (Attempt {attempt + 1})")
-                    result = crew.kickoff(inputs={"topic": topic})
+                    response = crew.kickoff(inputs={"topic": topic})
                     # print("\n" + "="*50)
                     # print("FINAL RESULT FROM THE AGENT")
                     # print("="*50)
-                   
-                    response = result["summary"]
-                    print(response)
-                    print(f"Summary task output :{tasks[1].output}")
+                
+                    print(f"Summary task output :{tasks[0].output}")
                     return response
                 except Exception as e:
                     if attempt < max_retries:
