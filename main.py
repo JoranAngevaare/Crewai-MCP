@@ -20,7 +20,7 @@ def get_available_llm():
     llm_configs = [
         {
             "name": "Ollama Local",
-            "model": "ollama/qwen3:1.7b",
+            "model": "ollama/qwen3:8b",
             "api_key_env": None,  # No API key needed for local
             "temperature": 0.7, 
             "kw":{"base_url":"http://localhost:11434"}
@@ -38,9 +38,9 @@ def get_available_llm():
                 llm = LLM(
                     model=config["model"],
                     temperature=config["temperature"],
-                    max_tokens=1000,
+                    max_tokens=10000,
                     **config.get('kw', {}),
-                    stream=True  
+                    # stream=True  
                 )
                 print(f"✅ Using {config['name']}: {config['model']}")
                 return llm
