@@ -8,7 +8,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
-
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("search_server")
@@ -37,7 +36,7 @@ mcp = FastMCP("search_server")
 
 @mcp.tool()
 async def list_text_files() -> str:
-    """Returns a list of txt files available to open with open_pdf_file"""
+    """Returns a list of txt files available to open with read_txt"""
     return "\n".join(
         glob.glob(f"{pathlib.Path(__file__).parent.resolve()}/data/txt/*.txt"),
     )
@@ -60,7 +59,6 @@ def ingest_txt(doc_path: str) -> str:
     return content
 
 
-
 if __name__ == "__main__":
     logger.info("Starting Brave Search MCP Server")
     try:
@@ -69,4 +67,4 @@ if __name__ == "__main__":
         logger.exception("Search server crashed")
         # Add pause to see error in Windows
         input("Press Enter to exit...")
-        raise 
+        raise
